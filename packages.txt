@@ -1,2 +1,2 @@
 libgl1
-libzbar0
+libglib2.0-0
