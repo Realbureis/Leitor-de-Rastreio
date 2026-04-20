@@ -1,4 +1,4 @@
-streamlit
+gradio
 ultralytics
 opencv-python-headless
 pyzbar
