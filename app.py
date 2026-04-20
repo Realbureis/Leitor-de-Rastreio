@@ -8,54 +8,46 @@ import easyocr
 # Configuração de Interface
 st.set_page_config(page_title="Scanner Jumbo CDP", layout="centered")
 st.title("⚡ Scanner Inteligente Jumbo CDP")
-st.write("IA para campos + Leitor de Rastreio")
+st.write("Identificação de campos + Código de Barras")
 
-# 1. Carregar Modelos (IA e Texto)
+# 1. Carregar Modelos (IA e Texto) com Cache para não gastar energia à toa
 @st.cache_resource
 def load_tools():
-    model = YOLO('best.pt') # Seu cérebro treinado
-    reader = easyocr.Reader(['pt']) # Leitor de texto em português
+    model = YOLO('best.pt') 
+    reader = easyocr.Reader(['pt'])
     return model, reader
 
 model, reader = load_tools()
 
-# 2. Ativar Câmera
-picture = st.camera_input("Aponte para o Pedido")
+# 2. Ativar Câmera ao vivo
+picture = st.camera_input("Aponte para o Pedido e capture")
 
 if picture:
     img = Image.open(picture)
     img_np = np.array(img)
 
-    # --- PARTE 1: CÓDIGO DE BARRAS (RASTREIO) ---
+    # --- PARTE 1: CÓDIGO DE BARRAS ---
     barcodes = decode(img)
-    st.subheader("📊 Código de Rastreio")
     if barcodes:
+        st.subheader("📊 Rastreio Detectado")
         for barcode in barcodes:
-            codigo = barcode.data.decode("utf-8")
-            st.success(f"✅ Rastreio Detectado: {codigo}")
-    else:
-        st.info("Nenhum código de barras na área.")
-
-    # --- PARTE 2: IA + EXTRAÇÃO DE TEXTO ---
-    st.subheader("🔍 Dados do Pedido")
+            st.success(f"CÓDIGO: {barcode.data.decode('utf-8')}")
+    
+    # --- PARTE 2: IA + OCR ---
+    st.subheader("🔍 Dados Extraídos")
     results = model(img)
     
     for result in results:
-        # Mostra a imagem com os quadrados da IA
-        st.image(result.plot(), caption="Detecção da IA")
+        # Mostra a foto com os quadrados
+        st.image(result.plot(), caption="Visualização da IA")
         
-        # Lógica para ler o texto dentro de cada quadrado detectado
+        # Extrai o texto de cada campo
         for box in result.boxes:
-            # Coordenadas do quadrado
-            xyxy = box.xyxy[0].cpu().numpy()
-            # Corta a imagem apenas no campo detectado (ex: campo 'pedido')
-            crop = img_np[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+            xyxy = box.xyxy[0].cpu().numpy().astype(int)
+            # Corta a imagem (Crop)
+            crop = img_np[xyxy[1]:xyxy[3], xyxy[0]:xyxy[2]]
             
-            # Lê o texto dentro desse corte
+            # OCR no corte
             txt_result = reader.readtext(crop, detail=0)
-            
             label = model.names[int(box.cls[0])]
-            texto_extraido = " ".join(txt_result)
-            
-            if texto_extraido:
-                st.write(f"**{label.upper()}:** {texto_extraido}")
+            st.write(f"**{label.upper()}:** {' '.join(txt_result)}")
