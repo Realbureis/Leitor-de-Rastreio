@@ -1,4 +1,5 @@
 streamlit
+ultralytics
 easyocr
 opencv-python-headless
 pyzbar
