@@ -3,46 +3,59 @@ from ultralytics import YOLO
 from PIL import Image
 from pyzbar.pyzbar import decode
 import numpy as np
+import easyocr
 
-# Título focado na operação da Jumbo CDP
-st.set_page_config(page_title="Scanner Vivo Jumbo", layout="centered")
-st.title("⚡ Scanner em Tempo Real")
-st.write("Aponte a câmera para o pedido e depois para o código de barras.")
+# Configuração de Interface
+st.set_page_config(page_title="Scanner Jumbo CDP", layout="centered")
+st.title("⚡ Scanner Inteligente Jumbo CDP")
+st.write("IA para campos + Leitor de Rastreio")
 
-# 1. Carregar o 'Cérebro' da IA
+# 1. Carregar Modelos (IA e Texto)
 @st.cache_resource
-def load_model():
-    return YOLO('best.pt') 
+def load_tools():
+    model = YOLO('best.pt') # Seu cérebro treinado
+    reader = easyocr.Reader(['pt']) # Leitor de texto em português
+    return model, reader
 
-model = load_model()
+model, reader = load_tools()
 
-# 2. Câmera ao vivo (Abre direto no celular do funcionário)
-picture = st.camera_input("Alinhe o pedido na marcação")
+# 2. Ativar Câmera
+picture = st.camera_input("Aponte para o Pedido")
 
 if picture:
-    # Transformar a imagem da câmera para o formato que a IA entende
     img = Image.open(picture)
-    img_array = np.array(img)
+    img_np = np.array(img)
 
-    # --- PASSO 1: DETECTAR CAMPOS DA FOLHA ---
-    st.subheader("🔍 Identificação da IA")
+    # --- PARTE 1: CÓDIGO DE BARRAS (RASTREIO) ---
+    barcodes = decode(img)
+    st.subheader("📊 Código de Rastreio")
+    if barcodes:
+        for barcode in barcodes:
+            codigo = barcode.data.decode("utf-8")
+            st.success(f"✅ Rastreio Detectado: {codigo}")
+    else:
+        st.info("Nenhum código de barras na área.")
+
+    # --- PARTE 2: IA + EXTRAÇÃO DE TEXTO ---
+    st.subheader("🔍 Dados do Pedido")
     results = model(img)
     
     for result in results:
-        # Mostra a imagem com os campos destacados (Unidade, Detento, etc.)
-        res_plotted = result.plot()
-        st.image(res_plotted, caption='Visualização da IA')
-
-    # --- PASSO 2: IDENTIFICAR CÓDIGO DE BARRAS ---
-    st.subheader("📊 Leitura de Rastreio")
-    barcodes = decode(img)
-    
-    if barcodes:
-        for barcode in barcodes:
-            barcode_data = barcode.data.decode("utf-8")
-            st.success(f"🎯 **Rastreio Identificado:** {barcode_data}")
-            # Dica: Aqui podemos colocar um botão para enviar ao n8n
-            if st.button(f"Confirmar Checkout Pedido {barcode_data}"):
-                st.info("Enviando dados para o sistema central...")
-    else:
-        st.warning("Aproxime a câmera do código de barras para capturar o rastreio.")
+        # Mostra a imagem com os quadrados da IA
+        st.image(result.plot(), caption="Detecção da IA")
+        
+        # Lógica para ler o texto dentro de cada quadrado detectado
+        for box in result.boxes:
+            # Coordenadas do quadrado
+            xyxy = box.xyxy[0].cpu().numpy()
+            # Corta a imagem apenas no campo detectado (ex: campo 'pedido')
+            crop = img_np[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+            
+            # Lê o texto dentro desse corte
+            txt_result = reader.readtext(crop, detail=0)
+            
+            label = model.names[int(box.cls[0])]
+            texto_extraido = " ".join(txt_result)
+            
+            if texto_extraido:
+                st.write(f"**{label.upper()}:** {texto_extraido}")
