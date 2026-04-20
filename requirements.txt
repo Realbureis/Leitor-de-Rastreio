@@ -1,6 +1,7 @@
 streamlit
 easyocr
 opencv-python-headless
+pyzbar
 Pillow
 requests
 numpy
