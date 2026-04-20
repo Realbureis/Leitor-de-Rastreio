@@ -1,91 +1,48 @@
 import streamlit as st
 from ultralytics import YOLO
-import easyocr
-import cv2
-import numpy as np
-import requests
 from PIL import Image
 from pyzbar.pyzbar import decode
+import numpy as np
 
-# Configurações iniciais
-st.set_page_config(page_title="Checkout Scanner Pro", layout="centered")
+# Título focado na operação da Jumbo CDP
+st.set_page_config(page_title="Scanner Vivo Jumbo", layout="centered")
+st.title("⚡ Scanner em Tempo Real")
+st.write("Aponte a câmera para o pedido e depois para o código de barras.")
 
-# 1. Carregar Motores (YOLO para detecção e EasyOCR para leitura)
+# 1. Carregar o 'Cérebro' da IA
 @st.cache_resource
-def load_models():
-    # O arquivo 'best.pt' será o que vamos treinar com suas fotos
-    try:
-        model_yolo = YOLO('best.pt') 
-    except:
-        model_yolo = None
-    ocr_reader = easyocr.Reader(['pt'])
-    return model_yolo, ocr_reader
+def load_model():
+    return YOLO('best.pt') 
 
-model, reader = load_models()
+model = load_model()
 
-st.title("📦 Scanner de Checkout Jumbo")
-st.write("Aponte para a folha e depois para a etiqueta de rastreio.")
+# 2. Câmera ao vivo (Abre direto no celular do funcionário)
+picture = st.camera_input("Alinhe o pedido na marcação")
 
-# Interface de Câmera
-img_file = st.camera_input("Scanner")
+if picture:
+    # Transformar a imagem da câmera para o formato que a IA entende
+    img = Image.open(picture)
+    img_array = np.array(img)
 
-if img_file:
-    # Converter imagem para formato processável
-    image = Image.open(img_file)
-    frame = np.array(image)
+    # --- PASSO 1: DETECTAR CAMPOS DA FOLHA ---
+    st.subheader("🔍 Identificação da IA")
+    results = model(img)
     
-    # --- PASSO A: DETECÇÃO DE ÁREAS (YOLO) ---
-    pedido, nome, fone = "", "", ""
+    for result in results:
+        # Mostra a imagem com os campos destacados (Unidade, Detento, etc.)
+        res_plotted = result.plot()
+        st.image(res_plotted, caption='Visualização da IA')
+
+    # --- PASSO 2: IDENTIFICAR CÓDIGO DE BARRAS ---
+    st.subheader("📊 Leitura de Rastreio")
+    barcodes = decode(img)
     
-    if model:
-        results = model(frame)
-        for r in results:
-            for box in r.boxes:
-                # Pegar coordenadas e classe (pedido, nome ou fone)
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                cls = int(box.cls[0])
-                label = model.names[cls]
-                
-                # Recortar a área detectada
-                crop = frame[y1:y2, x1:x2]
-                
-                # Ler o texto apenas daquela área específica
-                text_result = reader.readtext(crop, detail=0)
-                txt = " ".join(text_result)
-                
-                if label == 'pedido': pedido = txt
-                elif label == 'nome': nome = txt
-                elif label == 'fone': fone = txt
+    if barcodes:
+        for barcode in barcodes:
+            barcode_data = barcode.data.decode("utf-8")
+            st.success(f"🎯 **Rastreio Identificado:** {barcode_data}")
+            # Dica: Aqui podemos colocar um botão para enviar ao n8n
+            if st.button(f"Confirmar Checkout Pedido {barcode_data}"):
+                st.info("Enviando dados para o sistema central...")
     else:
-        st.warning("⚠️ Modelo 'best.pt' não encontrado. Use o OCR tradicional por enquanto.")
-
-    # --- PASSO B: LEITURA DE CÓDIGO DE BARRAS (RASTREIO) ---
-    barcodes = decode(frame)
-    rastreio = barcodes[0].data.decode('utf-8') if barcodes else ""
-
-    # --- PASSO C: FORMULÁRIO DE CONFERÊNCIA ---
-    with st.form("conferencia_dados"):
-        st.subheader("Dados Extraídos")
-        res_pedido = st.text_input("Nº Pedido", value=pedido)
-        res_nome = st.text_input("Comprador", value=nome)
-        res_fone = st.text_input("Fone", value=fone)
-        res_rastreio = st.text_input("Rastreio", value=rastreio)
-        
-        st.divider()
-        
-        # Botão de Envio para Apps Script
-        if st.form_submit_button("✅ ENVIAR PARA PLANILHA", use_container_width=True):
-            if res_pedido and res_rastreio:
-                # URL do seu Google Apps Script
-                URL_APPS_SCRIPT = "SUA_URL_AQUI"
-                payload = {
-                    "pedido": res_pedido,
-                    "nome": res_nome,
-                    "fone": res_tel,
-                    "rastreio": res_rastreio
-                }
-                # Envio real
-                # requests.post(URL_APPS_SCRIPT, json=payload)
-                st.success(f"Pedido {res_pedido} salvo na nuvem!")
-            else:
-                st.error("Campos obrigatórios faltando (Pedido ou Rastreio)!")
+        st.warning("Aproxime a câmera do código de barras para capturar o rastreio.")
