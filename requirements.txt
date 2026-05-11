@@ -5,3 +5,5 @@ pyzbar
 Pillow
 numpy
 requests
+streamlit
+easyocr
