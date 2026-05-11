@@ -1,9 +1,7 @@
-gradio
+streamlit
+easyocr
 ultralytics
 opencv-python-headless
 pyzbar
 Pillow
 numpy
-requests
-streamlit
-easyocr
